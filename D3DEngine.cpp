@@ -784,4 +784,31 @@ void D3DEngine::createRaytracingPipelineState()
         .pDesc = &hitGroupDesc
     };
     subobjectIndex++;
+
+    // shader config
+    D3D12_RAYTRACING_SHADER_CONFIG shaderConfig = {
+        .MaxPayloadSizeInBytes = sizeof(RaytracingPayload),
+        .MaxAttributeSizeInBytes = sizeof(BuiltInTriangleIntersectionAttributes)
+    };
+    subobjects[subobjectIndex] = D3D12_STATE_SUBOBJECT{
+        .Type = D3D12_STATE_SUBOBJECT_TYPE_RAYTRACING_SHADER_CONFIG,
+        .pDesc = &shaderConfig
+    };
+    subobjectIndex++;
+
+    std::array exportNames = {
+        RAYGEN_SHADER.c_str(),
+        MISS_SHADER.c_str(),
+        CLOSEST_HIT_SHADER.c_str()
+    };
+    D3D12_SUBOBJECT_TO_EXPORTS_ASSOCIATION subobjectToExportsAssociation = {
+        .pSubobjectToAssociate = &subobjects[subobjectIndex - 1],
+        .NumExports = static_cast<UINT>(exportNames.size()),
+        .pExports = exportNames.data()
+    };
+    subobjects[subobjectIndex] = D3D12_STATE_SUBOBJECT{
+        .Type = D3D12_STATE_SUBOBJECT_TYPE_SUBOBJECT_TO_EXPORTS_ASSOCIATION,
+        .pDesc = &subobjectToExportsAssociation
+    };
+    subobjectIndex++;
 }
