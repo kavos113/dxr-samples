@@ -312,6 +312,23 @@ void D3DEngine::createVertexBuffer()
 
 void D3DEngine::beginFrame(UINT frameIndex)
 {
+    D3D12_RESOURCE_BARRIER barrier = {
+        .Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION,
+        .Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE,
+        .Transition = {
+            .pResource = m_backBuffers[frameIndex].Get(),
+            .Subresource = 0,
+            .StateBefore = D3D12_RESOURCE_STATE_PRESENT,
+            .StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET
+        }
+    };
+    m_commandList->ResourceBarrier(1, &barrier);
+
+    auto rtvHandle = m_rtvHeap->GetCPUDescriptorHandleForHeapStart();
+    rtvHandle.ptr += frameIndex * m_device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
+
+    m_commandList->OMSetRenderTargets(1, &rtvHandle, FALSE, nullptr);
+    m_commandList->ClearRenderTargetView(rtvHandle, m_clearColor.data(), 0, nullptr);
 }
 
 void D3DEngine::recordCommands(UINT frameIndex) const
@@ -320,8 +337,71 @@ void D3DEngine::recordCommands(UINT frameIndex) const
 
 void D3DEngine::endFrame(UINT frameIndex)
 {
+    D3D12_RESOURCE_BARRIER barrier = {
+        .Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION,
+        .Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE,
+        .Transition = {
+            .pResource = m_backBuffers[frameIndex].Get(),
+            .Subresource = 0,
+            .StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET,
+            .StateAfter = D3D12_RESOURCE_STATE_PRESENT
+        }
+    };
+    m_commandList->ResourceBarrier(1, &barrier);
+
+    HRESULT hr = m_commandList->Close();
+    if (FAILED(hr))
+    {
+        std::cerr << "Failed to close command list." << std::endl;
+        return;
+    }
+
+    std::array<ID3D12CommandList*, 1> commandLists = { m_commandList.Get() };
+    m_commandQueue->ExecuteCommandLists(static_cast<UINT>(commandLists.size()), commandLists.data());
+
+    waitForFence();
+
+    hr = m_commandAllocator->Reset();
+    if (FAILED(hr))
+    {
+        std::cerr << "Failed to reset command allocator." << std::endl;
+        return;
+    }
+
+    hr = m_commandList->Reset(m_commandAllocator.Get(), nullptr);
+    if (FAILED(hr))
+    {
+        std::cerr << "Failed to reset command list." << std::endl;
+        return;
+    }
+
+    hr = m_swapchain->Present(1, 0);
+    if (FAILED(hr))
+    {
+        std::cerr << "Failed to present swap chain." << std::endl;
+        return;
+    }
 }
 
 void D3DEngine::waitForFence()
 {
+    m_fenceValue++;
+    UINT64 fenceValue = m_fenceValue;
+    HRESULT hr = m_commandQueue->Signal(m_fence.Get(), fenceValue);
+    if (FAILED(hr))
+    {
+        std::cerr << "Failed to signal command queue." << std::endl;
+        return;
+    }
+
+    if (m_fence->GetCompletedValue() < fenceValue)
+    {
+        hr = m_fence->SetEventOnCompletion(fenceValue, m_fenceEvent);
+        if (FAILED(hr))
+        {
+            std::cerr << "Failed to set event on fence completion." << std::endl;
+            return;
+        }
+        WaitForSingleObject(m_fenceEvent, INFINITE);
+    }
 }
