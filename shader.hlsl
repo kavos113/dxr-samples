@@ -13,15 +13,15 @@ struct Payload
     bool hit;
 };
 
-[PixelShader("miss")]
+[shader("miss")]
 void MissShader(inout Payload payload)
 {
     payload.hit = false;
 }
 
 
-[HitGroup("closesthit")]
+[shader("closesthit")]
 void ClosestHitShader(inout Payload payload, in BuiltInTriangleIntersectionAttributes attr)
 {
-    payload.hit = true; // Mark that we hit something
+    payload.hit = true;
 }
