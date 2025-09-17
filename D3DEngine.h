@@ -71,6 +71,7 @@ private:
 
     Microsoft::WRL::ComPtr<ID3D12Resource> m_vertexBuffer;
     Microsoft::WRL::ComPtr<ID3D12Resource> m_blas;
+    Microsoft::WRL::ComPtr<ID3D12Resource> m_tlas;
 };
 
 

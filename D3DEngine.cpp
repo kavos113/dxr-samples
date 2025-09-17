@@ -568,4 +568,75 @@ void D3DEngine::createAS()
         }
     };
     m_commandList->ResourceBarrier(1, &barrier);
+
+    // tlas
+    D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS tlasInputs = {
+        .Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL,
+        .Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_NONE,
+        .NumDescs = 1,
+        .DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY,
+    };
+    D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO tlasPrebuildInfo = {};
+    m_device->GetRaytracingAccelerationStructurePrebuildInfo(&tlasInputs, &tlasPrebuildInfo);
+
+    Microsoft::WRL::ComPtr<ID3D12Resource> tlasScratch;
+    Microsoft::WRL::ComPtr<ID3D12Resource> instanceDescBuffer;
+    createBuffer(
+        m_device.Get(),
+        tlasScratch.GetAddressOf(),
+        tlasPrebuildInfo.ScratchDataSizeInBytes,
+        D3D12_HEAP_TYPE_DEFAULT,
+        D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
+        D3D12_RESOURCE_STATE_UNORDERED_ACCESS
+    );
+    createBuffer(
+        m_device.Get(),
+        m_tlas.GetAddressOf(),
+        tlasPrebuildInfo.ResultDataMaxSizeInBytes,
+        D3D12_HEAP_TYPE_DEFAULT,
+        D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
+        D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE
+    );
+    createBuffer(
+        m_device.Get(),
+        instanceDescBuffer.GetAddressOf(),
+        sizeof(D3D12_RAYTRACING_INSTANCE_DESC),
+        D3D12_HEAP_TYPE_UPLOAD,
+        D3D12_RESOURCE_FLAG_NONE,
+        D3D12_RESOURCE_STATE_GENERIC_READ
+    );
+
+    D3D12_RAYTRACING_INSTANCE_DESC* instanceDesc = nullptr;
+    HRESULT hr = instanceDescBuffer->Map(0, nullptr, reinterpret_cast<void**>(&instanceDesc));
+    if (FAILED(hr))
+    {
+        throw std::runtime_error("Failed to map instance descriptor buffer.");
+    }
+    instanceDesc[0].InstanceID = 0;
+    instanceDesc[0].InstanceMask = 0xFF;
+    instanceDesc[0].InstanceContributionToHitGroupIndex = 0;
+    instanceDesc[0].Flags = D3D12_RAYTRACING_INSTANCE_FLAG_NONE;
+    instanceDesc[0].AccelerationStructure = m_blas->GetGPUVirtualAddress();
+    DirectX::XMFLOAT3X4 transformMatrix;
+    DirectX::XMStoreFloat3x4(&transformMatrix, DirectX::XMMatrixIdentity());
+    memcpy(instanceDesc[0].Transform, &transformMatrix, sizeof(transformMatrix));
+    instanceDescBuffer->Unmap(0, nullptr);
+
+    D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC tlasDesc = {
+        .DestAccelerationStructureData = m_tlas->GetGPUVirtualAddress(),
+        .Inputs = tlasInputs,
+        .ScratchAccelerationStructureData = tlasScratch->GetGPUVirtualAddress()
+    };
+    tlasDesc.Inputs.InstanceDescs = instanceDescBuffer->GetGPUVirtualAddress();
+
+    m_commandList->BuildRaytracingAccelerationStructure(&tlasDesc, 0, nullptr);
+
+    D3D12_RESOURCE_BARRIER tlasBarrier = {
+        .Type = D3D12_RESOURCE_BARRIER_TYPE_UAV,
+        .Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE,
+        .UAV = {
+            .pResource = m_tlas.Get()
+        }
+    };
+    m_commandList->ResourceBarrier(1, &tlasBarrier);
 }
