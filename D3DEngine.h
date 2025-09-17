@@ -64,6 +64,8 @@ private:
         {0.5f, -0.5f, 0.0f},
         {-0.5f, -0.5f, 0.0f}
     };
+
+    D3D12_VERTEX_BUFFER_VIEW m_vertexBufferView = {};
 };
 
 

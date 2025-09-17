@@ -20,6 +20,48 @@ void enableDebugLayer()
 
     std::cout << "D3D12 debug layer enabled." << std::endl;
 }
+
+void createBuffer(
+    ID3D12Device* device,
+    ID3D12Resource** buffer,
+    size_t size,
+    D3D12_HEAP_TYPE heapType,
+    D3D12_RESOURCE_FLAGS resourceFlags,
+    D3D12_RESOURCE_STATES initialState
+)
+{
+    D3D12_HEAP_PROPERTIES heapProps = {
+        .Type = heapType,
+        .CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN,
+        .MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN,
+        .CreationNodeMask = 1,
+        .VisibleNodeMask = 1
+    };
+    D3D12_RESOURCE_DESC resourceDesc = {
+        .Dimension = D3D12_RESOURCE_DIMENSION_BUFFER,
+        .Alignment = 0,
+        .Width = size,
+        .Height = 1,
+        .DepthOrArraySize = 1,
+        .MipLevels = 1,
+        .Format = DXGI_FORMAT_UNKNOWN,
+        .SampleDesc = {1, 0},
+        .Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR,
+        .Flags = resourceFlags
+    };
+    HRESULT hr = device->CreateCommittedResource(
+        &heapProps,
+        D3D12_HEAP_FLAG_NONE,
+        &resourceDesc,
+        initialState,
+        nullptr,
+        IID_PPV_ARGS(buffer)
+    );
+    if (FAILED(hr))
+    {
+        throw std::runtime_error("Failed to create buffer.");
+    }
+}
 }
 
 D3DEngine::D3DEngine(HWND hwnd)
@@ -308,6 +350,30 @@ void D3DEngine::createFence()
 
 void D3DEngine::createVertexBuffer()
 {
+    Microsoft::WRL::ComPtr<ID3D12Resource> vertexBuffer;
+    createBuffer(
+        m_device.Get(),
+        &vertexBuffer,
+        sizeof(DirectX::XMFLOAT3) * m_vertices.size(),
+        D3D12_HEAP_TYPE_UPLOAD,
+        D3D12_RESOURCE_FLAG_NONE,
+        D3D12_RESOURCE_STATE_GENERIC_READ
+    );
+
+    DirectX::XMFLOAT3* mappedData = nullptr;
+    HRESULT hr = vertexBuffer->Map(0, nullptr, reinterpret_cast<void**>(&mappedData));
+    if (FAILED(hr))
+    {
+        throw std::runtime_error("Failed to map vertex buffer.");
+    }
+    std::ranges::copy(m_vertices, mappedData);
+    vertexBuffer->Unmap(0, nullptr);
+
+    m_vertexBufferView = {
+        .BufferLocation = vertexBuffer->GetGPUVirtualAddress(),
+        .SizeInBytes = static_cast<UINT>(sizeof(DirectX::XMFLOAT3) * m_vertices.size()),
+        .StrideInBytes = sizeof(DirectX::XMFLOAT3)
+    };
 }
 
 void D3DEngine::beginFrame(UINT frameIndex)
