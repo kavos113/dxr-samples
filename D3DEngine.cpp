@@ -772,4 +772,16 @@ void D3DEngine::createRaytracingPipelineState()
         .Type = D3D12_STATE_SUBOBJECT_TYPE_DXIL_LIBRARY,
         .pDesc = &dxilLibraryDesc
     };
+    subobjectIndex++;
+
+    // hit group
+    D3D12_HIT_GROUP_DESC hitGroupDesc = {
+        .HitGroupExport = HIT_GROUP.c_str(),
+        .ClosestHitShaderImport = CLOSEST_HIT_SHADER.c_str(),
+    };
+    subobjects[subobjectIndex] = D3D12_STATE_SUBOBJECT{
+        .Type = D3D12_STATE_SUBOBJECT_TYPE_HIT_GROUP,
+        .pDesc = &hitGroupDesc
+    };
+    subobjectIndex++;
 }
