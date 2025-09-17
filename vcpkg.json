@@ -1,0 +1,9 @@
+{
+  "name" : "dxr-samples",
+  "version-string" : "1.0.0",
+  "builtin-baseline" : "dd3097e305afa53f7b4312371f62058d2e665320",
+  "dependencies" : [ {
+    "name" : "directxmath",
+    "version>=" : "2025-04-03"
+  } ]
+}
