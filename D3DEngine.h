@@ -40,6 +40,7 @@ private:
     void recordCommands(UINT frameIndex) const;
     void endFrame(UINT frameIndex);
 
+    void executeCommand(UINT frameIndex);
     void waitForFence(UINT frameIndex);
 
     void createAS();

@@ -451,6 +451,18 @@ void D3DEngine::endFrame(UINT frameIndex)
     };
     m_commandList->ResourceBarrier(1, &barrier);
 
+    executeCommand(frameIndex);
+
+    HRESULT hr = m_swapchain->Present(1, 0);
+    if (FAILED(hr))
+    {
+        std::cerr << "Failed to present swap chain." << std::endl;
+        return;
+    }
+}
+
+void D3DEngine::executeCommand(UINT frameIndex)
+{
     HRESULT hr = m_commandList->Close();
     if (FAILED(hr))
     {
@@ -474,13 +486,6 @@ void D3DEngine::endFrame(UINT frameIndex)
     if (FAILED(hr))
     {
         std::cerr << "Failed to reset command list." << std::endl;
-        return;
-    }
-
-    hr = m_swapchain->Present(1, 0);
-    if (FAILED(hr))
-    {
-        std::cerr << "Failed to present swap chain." << std::endl;
         return;
     }
 }
@@ -639,4 +644,6 @@ void D3DEngine::createAS()
         }
     };
     m_commandList->ResourceBarrier(1, &tlasBarrier);
+
+    executeCommand(0);
 }
