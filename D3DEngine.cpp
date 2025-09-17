@@ -811,4 +811,14 @@ void D3DEngine::createRaytracingPipelineState()
         .pDesc = &subobjectToExportsAssociation
     };
     subobjectIndex++;
+
+    // pipeline config
+    D3D12_RAYTRACING_PIPELINE_CONFIG pipelineConfig = {
+        .MaxTraceRecursionDepth = 2
+    };
+    subobjects[subobjectIndex] = D3D12_STATE_SUBOBJECT{
+        .Type = D3D12_STATE_SUBOBJECT_TYPE_RAYTRACING_PIPELINE_CONFIG,
+        .pDesc = &pipelineConfig
+    };
+    subobjectIndex++;
 }
