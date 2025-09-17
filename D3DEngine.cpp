@@ -787,7 +787,7 @@ void D3DEngine::createRaytracingPipelineState()
 
     // shader config
     D3D12_RAYTRACING_SHADER_CONFIG shaderConfig = {
-        .MaxPayloadSizeInBytes = sizeof(RaytracingPayload),
+        .MaxPayloadSizeInBytes = sizeof(float),
         .MaxAttributeSizeInBytes = sizeof(BuiltInTriangleIntersectionAttributes)
     };
     subobjects[subobjectIndex] = D3D12_STATE_SUBOBJECT{
