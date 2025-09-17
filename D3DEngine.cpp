@@ -77,6 +77,8 @@ D3DEngine::D3DEngine(HWND hwnd)
     createSwapChainResources();
     createFence();
     createVertexBuffer();
+
+    createAS();
 }
 
 void D3DEngine::cleanup()
@@ -385,10 +387,9 @@ void D3DEngine::createFence()
 
 void D3DEngine::createVertexBuffer()
 {
-    Microsoft::WRL::ComPtr<ID3D12Resource> vertexBuffer;
     createBuffer(
         m_device.Get(),
-        &vertexBuffer,
+        &m_vertexBuffer,
         sizeof(DirectX::XMFLOAT3) * m_vertices.size(),
         D3D12_HEAP_TYPE_UPLOAD,
         D3D12_RESOURCE_FLAG_NONE,
@@ -396,16 +397,16 @@ void D3DEngine::createVertexBuffer()
     );
 
     DirectX::XMFLOAT3* mappedData = nullptr;
-    HRESULT hr = vertexBuffer->Map(0, nullptr, reinterpret_cast<void**>(&mappedData));
+    HRESULT hr = m_vertexBuffer->Map(0, nullptr, reinterpret_cast<void**>(&mappedData));
     if (FAILED(hr))
     {
         throw std::runtime_error("Failed to map vertex buffer.");
     }
     std::ranges::copy(m_vertices, mappedData);
-    vertexBuffer->Unmap(0, nullptr);
+    m_vertexBuffer->Unmap(0, nullptr);
 
     m_vertexBufferView = {
-        .BufferLocation = vertexBuffer->GetGPUVirtualAddress(),
+        .BufferLocation = m_vertexBuffer->GetGPUVirtualAddress(),
         .SizeInBytes = static_cast<UINT>(sizeof(DirectX::XMFLOAT3) * m_vertices.size()),
         .StrideInBytes = sizeof(DirectX::XMFLOAT3)
     };
@@ -505,4 +506,66 @@ void D3DEngine::waitForFence(UINT frameIndex)
         }
         WaitForSingleObject(m_fenceEvents[frameIndex], INFINITE);
     }
+}
+
+void D3DEngine::createAS()
+{
+    // blas
+    D3D12_RAYTRACING_GEOMETRY_DESC geometryDesc = {
+        .Type = D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES,
+        .Flags = D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE,
+        .Triangles = {
+            .VertexFormat = DXGI_FORMAT_R32G32B32_FLOAT,
+            .VertexCount = static_cast<UINT>(m_vertices.size()),
+            .VertexBuffer = {
+                .StartAddress = m_vertexBuffer->GetGPUVirtualAddress(),
+                .StrideInBytes = sizeof(DirectX::XMFLOAT3)
+            },
+        }
+    };
+
+    D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS asInputs = {
+        .Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL,
+        .Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_TRACE,
+        .NumDescs = 1,
+        .DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY,
+        .pGeometryDescs = &geometryDesc
+    };
+
+    D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO asPrebuildInfo = {};
+    m_device->GetRaytracingAccelerationStructurePrebuildInfo(&asInputs, &asPrebuildInfo);
+
+    Microsoft::WRL::ComPtr<ID3D12Resource> blasScratch;
+    createBuffer(
+        m_device.Get(),
+        &blasScratch,
+        asPrebuildInfo.ScratchDataSizeInBytes,
+        D3D12_HEAP_TYPE_DEFAULT,
+        D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
+        D3D12_RESOURCE_STATE_UNORDERED_ACCESS
+    );
+    createBuffer(
+        m_device.Get(),
+        &m_blas,
+        asPrebuildInfo.ResultDataMaxSizeInBytes,
+        D3D12_HEAP_TYPE_DEFAULT,
+        D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
+        D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE
+    );
+
+    D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC blasDesc = {
+        .DestAccelerationStructureData = m_blas->GetGPUVirtualAddress(),
+        .Inputs = asInputs,
+        .ScratchAccelerationStructureData = blasScratch->GetGPUVirtualAddress()
+    };
+    m_commandList->BuildRaytracingAccelerationStructure(&blasDesc, 0, nullptr);
+
+    D3D12_RESOURCE_BARRIER barrier = {
+        .Type = D3D12_RESOURCE_BARRIER_TYPE_UAV,
+        .Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE,
+        .UAV = {
+            .pResource = m_blas.Get()
+        }
+    };
+    m_commandList->ResourceBarrier(1, &barrier);
 }

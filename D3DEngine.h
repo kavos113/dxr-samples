@@ -42,6 +42,8 @@ private:
 
     void waitForFence(UINT frameIndex);
 
+    void createAS();
+
     static constexpr UINT FRAME_COUNT = 2;
 
     Microsoft::WRL::ComPtr<IDXGIFactory7> m_dxgiFactory;
@@ -66,6 +68,9 @@ private:
     };
 
     D3D12_VERTEX_BUFFER_VIEW m_vertexBufferView = {};
+
+    Microsoft::WRL::ComPtr<ID3D12Resource> m_vertexBuffer;
+    Microsoft::WRL::ComPtr<ID3D12Resource> m_blas;
 };
 
 
