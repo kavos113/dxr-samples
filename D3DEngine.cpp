@@ -184,18 +184,126 @@ void D3DEngine::createDevice()
 
 void D3DEngine::createCommandResources()
 {
+    HRESULT hr = m_device->CreateCommandAllocator(
+        D3D12_COMMAND_LIST_TYPE_DIRECT,
+        IID_PPV_ARGS(&m_commandAllocator)
+    );
+    if (FAILED(hr))
+    {
+        throw std::runtime_error("Failed to create command allocator.");
+    }
+
+    hr = m_device->CreateCommandList(
+        0,
+        D3D12_COMMAND_LIST_TYPE_DIRECT,
+        m_commandAllocator.Get(),
+        nullptr,
+        IID_PPV_ARGS(&m_commandList)
+    );
+    if (FAILED(hr))
+    {
+        throw std::runtime_error("Failed to create command list.");
+    }
+
+    D3D12_COMMAND_QUEUE_DESC queueDesc = {
+        .Type = D3D12_COMMAND_LIST_TYPE_DIRECT,
+        .Priority = D3D12_COMMAND_QUEUE_PRIORITY_NORMAL,
+        .Flags = D3D12_COMMAND_QUEUE_FLAG_NONE,
+        .NodeMask = 0
+    };
+    hr = m_device->CreateCommandQueue(&queueDesc, IID_PPV_ARGS(&m_commandQueue));
+    if (FAILED(hr))
+    {
+        throw std::runtime_error("Failed to create command queue.");
+    }
 }
 
 void D3DEngine::createSwapChain(HWND hwnd)
 {
+    RECT rect;
+    GetClientRect(hwnd, &rect);
+
+    DXGI_SWAP_CHAIN_DESC1 swapChainDesc = {
+        .Width = static_cast<UINT>(rect.right - rect.left),
+        .Height = static_cast<UINT>(rect.bottom - rect.top),
+        .Format = DXGI_FORMAT_R8G8B8A8_UNORM,
+        .Stereo = FALSE,
+        .SampleDesc = {1, 0},
+        .BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT,
+        .BufferCount = FRAME_COUNT,
+        .Scaling = DXGI_SCALING_STRETCH,
+        .SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD,
+        .AlphaMode = DXGI_ALPHA_MODE_UNSPECIFIED,
+        .Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH
+    };
+    HRESULT hr = m_dxgiFactory->CreateSwapChainForHwnd(
+        m_commandQueue.Get(),
+        hwnd,
+        &swapChainDesc,
+        nullptr,
+        nullptr,
+        reinterpret_cast<IDXGISwapChain1**>(m_swapchain.GetAddressOf())
+    );
+    if (FAILED(hr))
+    {
+        throw std::runtime_error("Failed to create swap chain.");
+    }
 }
 
 void D3DEngine::createSwapChainResources()
 {
+    D3D12_DESCRIPTOR_HEAP_DESC rtvHeapDesc = {
+        .Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV,
+        .NumDescriptors = FRAME_COUNT,
+        .Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE,
+        .NodeMask = 0
+    };
+    HRESULT hr = m_device->CreateDescriptorHeap(&rtvHeapDesc, IID_PPV_ARGS(&m_rtvHeap));
+    if (FAILED(hr))
+    {
+        throw std::runtime_error("Failed to create RTV descriptor heap.");
+    }
+
+    DXGI_SWAP_CHAIN_DESC1 swapChainDesc = {};
+    hr = m_swapchain->GetDesc1(&swapChainDesc);
+    if (FAILED(hr))
+    {
+        throw std::runtime_error("Failed to get swap chain description.");
+    }
+
+    for (UINT i = 0; i < FRAME_COUNT; ++i)
+    {
+        hr = m_swapchain->GetBuffer(i, IID_PPV_ARGS(&m_backBuffers[i]));
+        if (FAILED(hr))
+        {
+            throw std::runtime_error("Failed to get back buffer.");
+        }
+
+        D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle = m_rtvHeap->GetCPUDescriptorHandleForHeapStart();
+        rtvHandle.ptr += i * m_device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
+        m_device->CreateRenderTargetView(m_backBuffers[i].Get(), nullptr, rtvHandle);
+    }
 }
 
 void D3DEngine::createFence()
 {
+    HRESULT hr = m_device->CreateFence(
+        0,
+        D3D12_FENCE_FLAG_NONE,
+        IID_PPV_ARGS(&m_fence)
+    );
+    if (FAILED(hr))
+    {
+        throw std::runtime_error("Failed to create fence.");
+    }
+
+    m_fenceValue = 0;
+
+    m_fenceEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
+    if (m_fenceEvent == nullptr)
+    {
+        throw std::runtime_error("Failed to create fence event.");
+    }
 }
 
 void D3DEngine::createVertexBuffer()
