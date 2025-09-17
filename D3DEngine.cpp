@@ -81,11 +81,25 @@ D3DEngine::D3DEngine(HWND hwnd)
 
 void D3DEngine::cleanup()
 {
-    waitForFence();
-    CloseHandle(m_fenceEvent);
-    m_fenceEvent = nullptr;
+    for (int i = 0; i < FRAME_COUNT; ++i)
+    {
+        waitForFence(i);
+    }
 
-    m_fence.Reset();
+    for (auto& fenceEvent : m_fenceEvents)
+    {
+        if (fenceEvent)
+        {
+            CloseHandle(fenceEvent);
+            fenceEvent = nullptr;
+        }
+    }
+
+    for (auto& fence : m_fences)
+    {
+        fence.Reset();
+    }
+
     m_commandList.Reset();
     m_rtvHeap.Reset();
     for (auto& backBuffer : m_backBuffers)
@@ -93,8 +107,13 @@ void D3DEngine::cleanup()
         backBuffer.Reset();
     }
     m_swapchain.Reset();
+
     m_commandQueue.Reset();
-    m_commandAllocator.Reset();
+    for (auto& commandAllocator : m_commandAllocators)
+    {
+        commandAllocator.Reset();
+    }
+
     m_device.Reset();
     m_dxgiFactory.Reset();
 }
@@ -226,19 +245,22 @@ void D3DEngine::createDevice()
 
 void D3DEngine::createCommandResources()
 {
-    HRESULT hr = m_device->CreateCommandAllocator(
-        D3D12_COMMAND_LIST_TYPE_DIRECT,
-        IID_PPV_ARGS(&m_commandAllocator)
-    );
-    if (FAILED(hr))
+    for (UINT i = 0; i < FRAME_COUNT; ++i)
     {
-        throw std::runtime_error("Failed to create command allocator.");
+        HRESULT hr = m_device->CreateCommandAllocator(
+            D3D12_COMMAND_LIST_TYPE_DIRECT,
+            IID_PPV_ARGS(&m_commandAllocators[i])
+        );
+        if (FAILED(hr))
+        {
+            throw std::runtime_error("Failed to create command allocator.");
+        }
     }
 
-    hr = m_device->CreateCommandList(
+    HRESULT hr = m_device->CreateCommandList(
         0,
         D3D12_COMMAND_LIST_TYPE_DIRECT,
-        m_commandAllocator.Get(),
+        m_commandAllocators[0].Get(),
         nullptr,
         IID_PPV_ARGS(&m_commandList)
     );
@@ -329,22 +351,20 @@ void D3DEngine::createSwapChainResources()
 
 void D3DEngine::createFence()
 {
-    HRESULT hr = m_device->CreateFence(
-        0,
-        D3D12_FENCE_FLAG_NONE,
-        IID_PPV_ARGS(&m_fence)
-    );
-    if (FAILED(hr))
+    for (UINT i = 0; i < FRAME_COUNT; ++i)
     {
-        throw std::runtime_error("Failed to create fence.");
-    }
+        HRESULT hr = m_device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&m_fences[i]));
+        if (FAILED(hr))
+        {
+            throw std::runtime_error("Failed to create fence.");
+        }
+        m_fenceValues[i] = 0;
 
-    m_fenceValue = 0;
-
-    m_fenceEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
-    if (m_fenceEvent == nullptr)
-    {
-        throw std::runtime_error("Failed to create fence event.");
+        m_fenceEvents[i] = CreateEvent(nullptr, FALSE, FALSE, nullptr);
+        if (m_fenceEvents[i] == nullptr)
+        {
+            throw std::runtime_error("Failed to create fence event.");
+        }
     }
 }
 
@@ -425,16 +445,16 @@ void D3DEngine::endFrame(UINT frameIndex)
     std::array<ID3D12CommandList*, 1> commandLists = { m_commandList.Get() };
     m_commandQueue->ExecuteCommandLists(static_cast<UINT>(commandLists.size()), commandLists.data());
 
-    waitForFence();
+    waitForFence(frameIndex);
 
-    hr = m_commandAllocator->Reset();
+    hr = m_commandAllocators[frameIndex]->Reset();
     if (FAILED(hr))
     {
         std::cerr << "Failed to reset command allocator." << std::endl;
         return;
     }
 
-    hr = m_commandList->Reset(m_commandAllocator.Get(), nullptr);
+    hr = m_commandList->Reset(m_commandAllocators[frameIndex].Get(), nullptr);
     if (FAILED(hr))
     {
         std::cerr << "Failed to reset command list." << std::endl;
@@ -449,25 +469,25 @@ void D3DEngine::endFrame(UINT frameIndex)
     }
 }
 
-void D3DEngine::waitForFence()
+void D3DEngine::waitForFence(UINT frameIndex)
 {
-    m_fenceValue++;
-    UINT64 fenceValue = m_fenceValue;
-    HRESULT hr = m_commandQueue->Signal(m_fence.Get(), fenceValue);
+    m_fenceValues[frameIndex]++;
+    UINT64 fenceValue = m_fenceValues[frameIndex];
+    HRESULT hr = m_commandQueue->Signal(m_fences[frameIndex].Get(), fenceValue);
     if (FAILED(hr))
     {
         std::cerr << "Failed to signal command queue." << std::endl;
         return;
     }
 
-    if (m_fence->GetCompletedValue() < fenceValue)
+    if (m_fences[frameIndex]->GetCompletedValue() < fenceValue)
     {
-        hr = m_fence->SetEventOnCompletion(fenceValue, m_fenceEvent);
+        hr = m_fences[frameIndex]->SetEventOnCompletion(fenceValue, m_fenceEvents[frameIndex]);
         if (FAILED(hr))
         {
             std::cerr << "Failed to set event on fence completion." << std::endl;
             return;
         }
-        WaitForSingleObject(m_fenceEvent, INFINITE);
+        WaitForSingleObject(m_fenceEvents[frameIndex], INFINITE);
     }
 }
