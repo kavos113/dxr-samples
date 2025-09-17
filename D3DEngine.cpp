@@ -232,7 +232,22 @@ void D3DEngine::createDevice()
         );
         if (SUCCEEDED(hr))
         {
-            std::cout << "D3D12 device created with feature level: " << std::hex << level << std::dec << std::endl;
+            D3D12_FEATURE_DATA_D3D12_OPTIONS5 options = {};
+            hr = m_device->CheckFeatureSupport(
+                D3D12_FEATURE_D3D12_OPTIONS5,
+                &options,
+                sizeof(options)
+            );
+            if (SUCCEEDED(hr) && options.RaytracingTier != D3D12_RAYTRACING_TIER_NOT_SUPPORTED)
+            {
+                std::cout << "Raytracing is supported." << std::endl;
+            }
+            else
+            {
+                std::cout << "Raytracing is not supported." << std::endl;
+                continue;
+            }
+
             break;
         }
     }
