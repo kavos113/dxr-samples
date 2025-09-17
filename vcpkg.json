@@ -5,5 +5,8 @@
   "dependencies" : [ {
     "name" : "directxmath",
     "version>=" : "2025-04-03"
+  }, {
+    "name" : "directx-dxc",
+    "version>=" : "2025-05-30"
   } ]
 }

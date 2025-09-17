@@ -75,6 +75,8 @@ private:
     Microsoft::WRL::ComPtr<ID3D12Resource> m_blas;
     Microsoft::WRL::ComPtr<ID3D12Resource> m_tlas;
 
+    Microsoft::WRL::ComPtr<ID3D12StateObject> m_raytracingPipelineState;
+
     const std::wstring SHADER_FILE = L"shader.hlsl";
     const std::wstring RAYGEN_SHADER = L"RayGen";
     const std::wstring MISS_SHADER = L"Miss";

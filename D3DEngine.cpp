@@ -1,5 +1,7 @@
 #include "D3DEngine.h"
 
+#include <dxcapi.h>
+
 #include <iostream>
 
 namespace
@@ -79,6 +81,7 @@ D3DEngine::D3DEngine(HWND hwnd)
     createVertexBuffer();
 
     createAS();
+    createRaytracingPipelineState();
 }
 
 void D3DEngine::cleanup()
@@ -646,4 +649,127 @@ void D3DEngine::createAS()
     m_commandList->ResourceBarrier(1, &tlasBarrier);
 
     executeCommand(0);
+}
+
+void D3DEngine::createRaytracingPipelineState()
+{
+    std::array<D3D12_STATE_SUBOBJECT, 10> subobjects = {};
+    int subobjectIndex = 0;
+
+    // dxil library
+    Microsoft::WRL::ComPtr<IDxcCompiler3> compiler;
+    Microsoft::WRL::ComPtr<IDxcUtils> utils;
+    HRESULT hr = DxcCreateInstance(CLSID_DxcCompiler, IID_PPV_ARGS(&compiler));
+    if (FAILED(hr))
+    {
+        throw std::runtime_error("Failed to create DXC compiler instance.");
+    }
+    hr = DxcCreateInstance(CLSID_DxcUtils, IID_PPV_ARGS(&utils));
+    if (FAILED(hr))
+    {
+        throw std::runtime_error("Failed to create DXC utils instance.");
+    }
+
+    Microsoft::WRL::ComPtr<IDxcIncludeHandler> includeHandler;
+    hr = utils->CreateDefaultIncludeHandler(&includeHandler);
+    if (FAILED(hr))
+    {
+        throw std::runtime_error("Failed to create default include handler.");
+    }
+
+    std::array args = {
+        SHADER_FILE.c_str(),
+        L"-T", L"lib_6_3",
+    };
+
+    Microsoft::WRL::ComPtr<IDxcBlobEncoding> sourceBlob;
+    hr = utils->LoadFile(SHADER_FILE.c_str(), nullptr, &sourceBlob);
+    if (FAILED(hr))
+    {
+        throw std::runtime_error("Failed to load shader file.");
+    }
+
+    DxcBuffer sourceBuffer = {
+        .Ptr = sourceBlob->GetBufferPointer(),
+        .Size = sourceBlob->GetBufferSize(),
+        .Encoding = DXC_CP_ACP
+    };
+
+    Microsoft::WRL::ComPtr<IDxcResult> result;
+    hr = compiler->Compile(
+        &sourceBuffer,
+        args.data(),
+        args.size(),
+        includeHandler.Get(),
+        IID_PPV_ARGS(&result)
+    );
+    if (FAILED(hr))
+    {
+        throw std::runtime_error("Failed to compile shader.");
+    }
+
+    Microsoft::WRL::ComPtr<IDxcBlobUtf8> errors;
+    hr = result->GetOutput(
+        DXC_OUT_ERRORS,
+        IID_PPV_ARGS(&errors),
+        nullptr
+    );
+    if (FAILED(hr) || (errors && errors->GetStringLength() > 0))
+    {
+        std::cerr << "Shader compilation failed with error code: " << hr << std::endl;
+        if (errors)
+        {
+            std::cerr << static_cast<const char*>(errors->GetBufferPointer()) << std::endl;
+        }
+        throw std::runtime_error("Shader compilation failed.");
+    }
+
+    result->GetStatus(&hr);
+    if (FAILED(hr))
+    {
+        throw std::runtime_error("Shader compilation failed with unknown error.");
+    }
+
+    Microsoft::WRL::ComPtr<IDxcBlob> shaderBlob;
+    Microsoft::WRL::ComPtr<IDxcBlobUtf16> shaderName;
+    hr = result->GetOutput(
+        DXC_OUT_OBJECT,
+        IID_PPV_ARGS(&shaderBlob),
+        &shaderName
+    );
+    if (FAILED(hr) || !shaderBlob)
+    {
+        throw std::runtime_error("Failed to get compiled shader object.");
+    }
+
+    std::array exportDescs = {
+        D3D12_EXPORT_DESC{
+            .Name = RAYGEN_SHADER.c_str(),
+            .ExportToRename = nullptr,
+            .Flags = D3D12_EXPORT_FLAG_NONE
+        },
+        D3D12_EXPORT_DESC{
+            .Name = MISS_SHADER.c_str(),
+            .ExportToRename = nullptr,
+            .Flags = D3D12_EXPORT_FLAG_NONE
+        },
+        D3D12_EXPORT_DESC{
+            .Name = CLOSEST_HIT_SHADER.c_str(),
+            .ExportToRename = nullptr,
+            .Flags = D3D12_EXPORT_FLAG_NONE
+        }
+    };
+
+    D3D12_DXIL_LIBRARY_DESC dxilLibraryDesc = {
+        .DXILLibrary = {
+            .pShaderBytecode = shaderBlob->GetBufferPointer(),
+            .BytecodeLength = shaderBlob->GetBufferSize()
+        },
+        .NumExports = static_cast<UINT>(exportDescs.size()),
+        .pExports = exportDescs.data()
+    };
+    subobjects[subobjectIndex] = D3D12_STATE_SUBOBJECT{
+        .Type = D3D12_STATE_SUBOBJECT_TYPE_DXIL_LIBRARY,
+        .pDesc = &dxilLibraryDesc
+    };
 }
