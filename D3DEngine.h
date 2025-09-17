@@ -12,8 +12,8 @@
 #include <DirectXMath.h>
 
 #include <array>
-#include <memory>
 #include <vector>
+#include <string>
 
 class D3DEngine
 {
@@ -44,6 +44,7 @@ private:
     void waitForFence(UINT frameIndex);
 
     void createAS();
+    void createRaytracingPipelineState();
 
     static constexpr UINT FRAME_COUNT = 2;
 
@@ -73,6 +74,22 @@ private:
     Microsoft::WRL::ComPtr<ID3D12Resource> m_vertexBuffer;
     Microsoft::WRL::ComPtr<ID3D12Resource> m_blas;
     Microsoft::WRL::ComPtr<ID3D12Resource> m_tlas;
+
+    const std::wstring SHADER_FILE = L"shader.hlsl";
+    const std::wstring RAYGEN_SHADER = L"RayGen";
+    const std::wstring MISS_SHADER = L"Miss";
+    const std::wstring CLOSEST_HIT_SHADER = L"ClosestHit";
+    const std::wstring HIT_GROUP = L"HitGroup";
+
+    struct RaytracingPayload
+    {
+        bool hit;
+    };
+
+    struct BuiltInTriangleIntersectionAttributes
+    {
+        DirectX::XMFLOAT2 barycentrics;
+    };
 };
 
 
