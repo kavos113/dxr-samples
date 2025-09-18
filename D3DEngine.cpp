@@ -430,23 +430,71 @@ void D3DEngine::beginFrame(UINT frameIndex)
         .Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION,
         .Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE,
         .Transition = {
-            .pResource = m_backBuffers[frameIndex].Get(),
+            .pResource = m_raytracingOutput.Get(),
             .Subresource = 0,
-            .StateBefore = D3D12_RESOURCE_STATE_PRESENT,
-            .StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET
+            .StateBefore = D3D12_RESOURCE_STATE_COPY_SOURCE,
+            .StateAfter = D3D12_RESOURCE_STATE_UNORDERED_ACCESS
         }
     };
     m_commandList->ResourceBarrier(1, &barrier);
-
-    auto rtvHandle = m_rtvHeap->GetCPUDescriptorHandleForHeapStart();
-    rtvHandle.ptr += frameIndex * m_device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
-
-    m_commandList->OMSetRenderTargets(1, &rtvHandle, FALSE, nullptr);
-    m_commandList->ClearRenderTargetView(rtvHandle, m_clearColor.data(), 0, nullptr);
 }
 
 void D3DEngine::recordCommands(UINT frameIndex) const
 {
+    std::array descHeaps = { m_descHeap.Get() };
+    m_commandList->SetDescriptorHeaps(descHeaps.size(), descHeaps.data());
+
+    D3D12_DISPATCH_RAYS_DESC dispatchDesc = {
+        .RayGenerationShaderRecord = {
+            .StartAddress = m_shaderTable->GetGPUVirtualAddress(),
+            .SizeInBytes = m_shaderRecordSize
+        },
+        .MissShaderTable = {
+            .StartAddress = m_shaderTable->GetGPUVirtualAddress() + m_shaderRecordSize,
+            .SizeInBytes = m_shaderRecordSize * 2,
+            .StrideInBytes = m_shaderRecordSize
+        },
+        .HitGroupTable = {
+            .StartAddress = m_shaderTable->GetGPUVirtualAddress() + m_shaderRecordSize * 2,
+            .SizeInBytes = m_shaderRecordSize * 2,
+            .StrideInBytes = m_shaderRecordSize
+        },
+        .Width = static_cast<UINT>(m_windowRect.right - m_windowRect.left),
+        .Height = static_cast<UINT>(m_windowRect.bottom - m_windowRect.top),
+        .Depth = 1
+    };
+
+    m_commandList->SetComputeRootSignature(m_globalRootSignature.Get());
+    m_commandList->SetPipelineState1(m_raytracingPipelineState.Get());
+
+    m_commandList->DispatchRays(&dispatchDesc);
+
+    std::array barriers = {
+        D3D12_RESOURCE_BARRIER{
+            .Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION,
+            .Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE,
+            .Transition = {
+                .pResource = m_raytracingOutput.Get(),
+                .Subresource = 0,
+                .StateBefore = D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+                .StateAfter = D3D12_RESOURCE_STATE_COPY_SOURCE
+            }
+        },
+        D3D12_RESOURCE_BARRIER{
+            .Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION,
+            .Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE,
+            .Transition = {
+                .pResource = m_backBuffers[frameIndex].Get(),
+                .Subresource = 0,
+                .StateBefore = D3D12_RESOURCE_STATE_PRESENT,
+                .StateAfter = D3D12_RESOURCE_STATE_COPY_DEST
+            }
+        }
+    };
+
+    m_commandList->ResourceBarrier(barriers.size(), barriers.data());
+
+    m_commandList->CopyResource(m_backBuffers[frameIndex].Get(), m_raytracingOutput.Get());
 }
 
 void D3DEngine::endFrame(UINT frameIndex)
@@ -457,7 +505,7 @@ void D3DEngine::endFrame(UINT frameIndex)
         .Transition = {
             .pResource = m_backBuffers[frameIndex].Get(),
             .Subresource = 0,
-            .StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET,
+            .StateBefore = D3D12_RESOURCE_STATE_COPY_DEST,
             .StateAfter = D3D12_RESOURCE_STATE_PRESENT
         }
     };
@@ -483,7 +531,7 @@ void D3DEngine::executeCommand(UINT frameIndex)
     }
 
     std::array<ID3D12CommandList*, 1> commandLists = { m_commandList.Get() };
-    m_commandQueue->ExecuteCommandLists(static_cast<UINT>(commandLists.size()), commandLists.data());
+    m_commandQueue->ExecuteCommandLists(commandLists.size(), commandLists.data());
 
     waitForFence(frameIndex);
 
