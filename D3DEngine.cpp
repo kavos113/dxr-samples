@@ -866,4 +866,82 @@ void D3DEngine::createRaytracingPipelineState()
     };
     subobjectIndex++;
 
+    // local root signature (for RayGen shader)
+    std::array ranges = {
+        D3D12_DESCRIPTOR_RANGE{
+            .RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV,
+            .NumDescriptors = 1,
+            .BaseShaderRegister = 0,
+            .RegisterSpace = 0,
+            .OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND
+        },
+        D3D12_DESCRIPTOR_RANGE{
+            .RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV,
+            .NumDescriptors = 1,
+            .BaseShaderRegister = 0,
+            .RegisterSpace = 0,
+            .OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND
+        },
+    };
+    D3D12_ROOT_PARAMETER param = {
+        .ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE,
+        .DescriptorTable = {
+            .NumDescriptorRanges = static_cast<UINT>(ranges.size()),
+            .pDescriptorRanges = ranges.data()
+        },
+        .ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL,
+    };
+    D3D12_ROOT_SIGNATURE_DESC raygenRootSignatureDesc = {
+        .NumParameters = 1,
+        .pParameters = &param,
+        .NumStaticSamplers = 0,
+        .pStaticSamplers = nullptr,
+        .Flags = D3D12_ROOT_SIGNATURE_FLAG_LOCAL_ROOT_SIGNATURE
+    };
+    hr = D3D12SerializeRootSignature(
+        &raygenRootSignatureDesc,
+        D3D_ROOT_SIGNATURE_VERSION_1,
+        &signatureBlob,
+        &errorBlob
+    );
+    if (FAILED(hr))
+    {
+        std::cerr << "Failed to serialize RayGen root signature: " << (errorBlob ? static_cast<const char*>(errorBlob->GetBufferPointer()) : "Unknown error") << std::endl;
+        return;
+    }
+
+    Microsoft::WRL::ComPtr<ID3D12RootSignature> raygenRootSignature;
+    hr = m_device->CreateRootSignature(
+        0,
+        signatureBlob->GetBufferPointer(),
+        signatureBlob->GetBufferSize(),
+        IID_PPV_ARGS(&raygenRootSignature)
+    );
+    if (FAILED(hr))
+    {
+        std::cerr << "Failed to create RayGen root signature." << std::endl;
+        return;
+    }
+
+    D3D12_LOCAL_ROOT_SIGNATURE localRootSignature = {
+        .pLocalRootSignature = raygenRootSignature.Get()
+    };
+    subobjects[subobjectIndex] = D3D12_STATE_SUBOBJECT{
+        .Type = D3D12_STATE_SUBOBJECT_TYPE_LOCAL_ROOT_SIGNATURE,
+        .pDesc = &localRootSignature
+    };
+    subobjectIndex++;
+
+    std::array raygenExportNames = { RAYGEN_SHADER.c_str() };
+    D3D12_SUBOBJECT_TO_EXPORTS_ASSOCIATION raygenSubobjectToExportsAssociation = {
+        .pSubobjectToAssociate = &subobjects[subobjectIndex - 1],
+        .NumExports = static_cast<UINT>(raygenExportNames.size()),
+        .pExports = raygenExportNames.data()
+    };
+    subobjects[subobjectIndex] = D3D12_STATE_SUBOBJECT{
+        .Type = D3D12_STATE_SUBOBJECT_TYPE_SUBOBJECT_TO_EXPORTS_ASSOCIATION,
+        .pDesc = &raygenSubobjectToExportsAssociation
+    };
+    subobjectIndex++;
+
 }
