@@ -998,4 +998,15 @@ void D3DEngine::createRaytracingPipelineState()
     };
     subobjectIndex++;
 
+    D3D12_STATE_OBJECT_DESC stateObjectDesc = {
+        .Type = D3D12_STATE_OBJECT_TYPE_RAYTRACING_PIPELINE,
+        .NumSubobjects = static_cast<UINT>(subobjectIndex),
+        .pSubobjects = subobjects.data()
+    };
+    hr = m_device->CreateStateObject(&stateObjectDesc, IID_PPV_ARGS(&m_raytracingPipelineState));
+    if (FAILED(hr))
+    {
+        std::cerr << "Failed to create raytracing pipeline state object." << std::endl;
+        return;
+    }
 }
