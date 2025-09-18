@@ -821,4 +821,49 @@ void D3DEngine::createRaytracingPipelineState()
         .pDesc = &pipelineConfig
     };
     subobjectIndex++;
+
+    // global root signature
+    D3D12_ROOT_SIGNATURE_DESC rootSignatureDesc = {
+        .NumParameters = 0,
+        .pParameters = nullptr,
+        .NumStaticSamplers = 0,
+        .pStaticSamplers = nullptr,
+        .Flags = D3D12_ROOT_SIGNATURE_FLAG_NONE
+    };
+    Microsoft::WRL::ComPtr<ID3DBlob> signatureBlob;
+    Microsoft::WRL::ComPtr<ID3DBlob> errorBlob;
+    hr = D3D12SerializeRootSignature(
+        &rootSignatureDesc,
+        D3D_ROOT_SIGNATURE_VERSION_1,
+        &signatureBlob,
+        &errorBlob
+    );
+    if (FAILED(hr))
+    {
+        std::cerr << "Failed to serialize global root signature: " << (errorBlob ? static_cast<const char*>(errorBlob->GetBufferPointer()) : "Unknown error") << std::endl;
+        return;
+    }
+
+    Microsoft::WRL::ComPtr<ID3D12RootSignature> rootSignature;
+    hr = m_device->CreateRootSignature(
+        0,
+        signatureBlob->GetBufferPointer(),
+        signatureBlob->GetBufferSize(),
+        IID_PPV_ARGS(&rootSignature)
+    );
+    if (FAILED(hr))
+    {
+        std::cerr << "Failed to create global root signature." << std::endl;
+        return;
+    }
+
+    D3D12_GLOBAL_ROOT_SIGNATURE globalRootSignature = {
+        .pGlobalRootSignature = rootSignature.Get()
+    };
+    subobjects[subobjectIndex] = D3D12_STATE_SUBOBJECT{
+        .Type = D3D12_STATE_SUBOBJECT_TYPE_GLOBAL_ROOT_SIGNATURE,
+        .pDesc = &globalRootSignature
+    };
+    subobjectIndex++;
+
 }
