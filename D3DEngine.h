@@ -88,8 +88,8 @@ private:
 
     const std::wstring SHADER_FILE = L"shader.hlsl";
     const std::wstring RAYGEN_SHADER = L"RayGen";
-    const std::wstring MISS_SHADER = L"Miss";
-    const std::wstring CLOSEST_HIT_SHADER = L"ClosestHit";
+    const std::wstring MISS_SHADER = L"MissShader";
+    const std::wstring CLOSEST_HIT_SHADER = L"ClosestHitShader";
     const std::wstring HIT_GROUP = L"HitGroup";
 
     struct RaytracingPayload

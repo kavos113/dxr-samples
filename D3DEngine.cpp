@@ -1056,7 +1056,7 @@ void D3DEngine::createRaytracingPipelineState()
 
     D3D12_STATE_OBJECT_DESC stateObjectDesc = {
         .Type = D3D12_STATE_OBJECT_TYPE_RAYTRACING_PIPELINE,
-        .NumSubobjects = static_cast<UINT>(subobjectIndex),
+        .NumSubobjects = subobjects.size(),
         .pSubobjects = subobjects.data()
     };
     hr = m_device->CreateStateObject(&stateObjectDesc, IID_PPV_ARGS(&m_raytracingPipelineState));
@@ -1170,8 +1170,8 @@ void D3DEngine::createShaderTable()
 
     // raygen
     memcpy(mappedData, stateObjectProps->GetShaderIdentifier(RAYGEN_SHADER.c_str()), D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
-    D3D12_GPU_DESCRIPTOR_HANDLE descHandle = m_descHeap->GetGPUDescriptorHandleForHeapStart();
-    memcpy(mappedData + D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES, &descHandle, sizeof(D3D12_GPU_DESCRIPTOR_HANDLE));
+    UINT64 descHeapAddress = m_descHeap->GetGPUDescriptorHandleForHeapStart().ptr;
+    memcpy(mappedData + D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES, &descHeapAddress, sizeof(D3D12_GPU_DESCRIPTOR_HANDLE));
     mappedData += m_shaderRecordSize;
 
     // miss

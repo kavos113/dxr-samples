@@ -7,7 +7,6 @@ add_executable(dxr-sample
         main.cpp
         Application.cpp
         D3DEngine.cpp
-        main.cpp
 )
 target_link_libraries(dxr-sample PRIVATE d3d12 dxgi d3dcompiler)
 target_compile_definitions(dxr-sample PRIVATE DEBUG)
