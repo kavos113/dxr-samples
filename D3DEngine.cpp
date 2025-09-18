@@ -72,6 +72,8 @@ D3DEngine::D3DEngine(HWND hwnd)
     enableDebugLayer();
 #endif
 
+    GetClientRect(hwnd, &m_windowRect);
+
     createDXGIFactory();
     createDevice();
     createCommandResources();
@@ -82,6 +84,7 @@ D3DEngine::D3DEngine(HWND hwnd)
 
     createAS();
     createRaytracingPipelineState();
+    createRaytracingResources();
 }
 
 void D3DEngine::cleanup()
@@ -1008,4 +1011,74 @@ void D3DEngine::createRaytracingPipelineState()
         std::cerr << "Failed to create raytracing pipeline state object." << std::endl;
         return;
     }
+}
+
+void D3DEngine::createRaytracingResources()
+{
+    D3D12_DESCRIPTOR_HEAP_DESC heapDesc = {
+        .Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
+        .NumDescriptors = 2, // | tlas | output texture |
+        .Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE,
+        .NodeMask = 0
+    };
+    HRESULT hr = m_device->CreateDescriptorHeap(&heapDesc, IID_PPV_ARGS(&m_descHeap));
+    if (FAILED(hr))
+    {
+        throw std::runtime_error("Failed to create descriptor heap.");
+    }
+
+    D3D12_HEAP_PROPERTIES heapProperties = {
+        .Type = D3D12_HEAP_TYPE_DEFAULT,
+        .CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN,
+        .MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN,
+        .CreationNodeMask = 0,
+        .VisibleNodeMask = 0
+    };
+    D3D12_RESOURCE_DESC resDesc = {
+        .Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D,
+        .Alignment = 0,
+        .Width = static_cast<UINT64>(m_windowRect.right - m_windowRect.left),
+        .Height = static_cast<UINT>(m_windowRect.bottom - m_windowRect.top),
+        .DepthOrArraySize = 1,
+        .MipLevels = 1,
+        .Format = DXGI_FORMAT_R8G8B8A8_UNORM,
+        .SampleDesc = {1, 0},
+        .Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN,
+        .Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS
+    };
+    hr = m_device->CreateCommittedResource(
+        &heapProperties,
+        D3D12_HEAP_FLAG_NONE,
+        &resDesc,
+        D3D12_RESOURCE_STATE_COPY_SOURCE,
+        nullptr,
+        IID_PPV_ARGS(&m_raytracingOutput)
+    );
+    if (FAILED(hr))
+    {
+        throw std::runtime_error("Failed to create raytracing output resource.");
+    }
+
+    D3D12_CPU_DESCRIPTOR_HANDLE srvHandle = m_descHeap->GetCPUDescriptorHandleForHeapStart();
+
+    D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc ={
+        .Format = DXGI_FORMAT_UNKNOWN,
+        .ViewDimension = D3D12_SRV_DIMENSION_RAYTRACING_ACCELERATION_STRUCTURE,
+        .Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING,
+        .RaytracingAccelerationStructure = {
+            .Location = m_tlas->GetGPUVirtualAddress()
+        }
+    };
+    m_device->CreateShaderResourceView(nullptr, &srvDesc, srvHandle);
+
+    srvHandle.ptr += m_device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+
+    D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc = {
+        .Format = DXGI_FORMAT_R8G8B8A8_UNORM,
+        .ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D,
+        .Texture2D = {
+            .MipSlice = 0,
+        }
+    };
+    m_device->CreateUnorderedAccessView(m_raytracingOutput.Get(), nullptr, &uavDesc, srvHandle);
 }

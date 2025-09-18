@@ -45,6 +45,7 @@ private:
 
     void createAS();
     void createRaytracingPipelineState();
+    void createRaytracingResources();
 
     static constexpr UINT FRAME_COUNT = 2;
 
@@ -77,6 +78,10 @@ private:
 
     Microsoft::WRL::ComPtr<ID3D12StateObject> m_raytracingPipelineState;
     Microsoft::WRL::ComPtr<ID3D12RootSignature> m_globalRootSignature;
+    Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> m_descHeap;
+    Microsoft::WRL::ComPtr<ID3D12Resource> m_raytracingOutput;
+
+    RECT m_windowRect = {};
 
     const std::wstring SHADER_FILE = L"shader.hlsl";
     const std::wstring RAYGEN_SHADER = L"RayGen";
