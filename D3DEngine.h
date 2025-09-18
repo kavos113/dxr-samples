@@ -94,7 +94,7 @@ private:
 
     struct RaytracingPayload
     {
-        bool hit;
+        DirectX::XMFLOAT4 color;
     };
 
     struct BuiltInTriangleIntersectionAttributes

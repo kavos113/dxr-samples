@@ -416,12 +416,6 @@ void D3DEngine::createVertexBuffer()
     }
     std::ranges::copy(m_vertices, mappedData);
     m_vertexBuffer->Unmap(0, nullptr);
-
-    m_vertexBufferView = {
-        .BufferLocation = m_vertexBuffer->GetGPUVirtualAddress(),
-        .SizeInBytes = static_cast<UINT>(sizeof(DirectX::XMFLOAT3) * m_vertices.size()),
-        .StrideInBytes = sizeof(DirectX::XMFLOAT3)
-    };
 }
 
 void D3DEngine::beginFrame(UINT frameIndex)
@@ -451,12 +445,12 @@ void D3DEngine::recordCommands(UINT frameIndex) const
         },
         .MissShaderTable = {
             .StartAddress = m_shaderTable->GetGPUVirtualAddress() + m_shaderRecordSize,
-            .SizeInBytes = m_shaderRecordSize * 2,
+            .SizeInBytes = m_shaderRecordSize,
             .StrideInBytes = m_shaderRecordSize
         },
         .HitGroupTable = {
             .StartAddress = m_shaderTable->GetGPUVirtualAddress() + m_shaderRecordSize * 2,
-            .SizeInBytes = m_shaderRecordSize * 2,
+            .SizeInBytes = m_shaderRecordSize,
             .StrideInBytes = m_shaderRecordSize
         },
         .Width = static_cast<UINT>(m_windowRect.right - m_windowRect.left),
@@ -844,7 +838,7 @@ void D3DEngine::createRaytracingPipelineState()
 
     // shader config
     D3D12_RAYTRACING_SHADER_CONFIG shaderConfig = {
-        .MaxPayloadSizeInBytes = sizeof(float),
+        .MaxPayloadSizeInBytes = sizeof(RaytracingPayload),
         .MaxAttributeSizeInBytes = sizeof(BuiltInTriangleIntersectionAttributes)
     };
     subobjects[subobjectIndex] = D3D12_STATE_SUBOBJECT{
