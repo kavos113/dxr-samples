@@ -844,12 +844,11 @@ void D3DEngine::createRaytracingPipelineState()
         return;
     }
 
-    Microsoft::WRL::ComPtr<ID3D12RootSignature> rootSignature;
     hr = m_device->CreateRootSignature(
         0,
         signatureBlob->GetBufferPointer(),
         signatureBlob->GetBufferSize(),
-        IID_PPV_ARGS(&rootSignature)
+        IID_PPV_ARGS(&m_globalRootSignature)
     );
     if (FAILED(hr))
     {
@@ -858,7 +857,7 @@ void D3DEngine::createRaytracingPipelineState()
     }
 
     D3D12_GLOBAL_ROOT_SIGNATURE globalRootSignature = {
-        .pGlobalRootSignature = rootSignature.Get()
+        .pGlobalRootSignature = m_globalRootSignature.Get()
     };
     subobjects[subobjectIndex] = D3D12_STATE_SUBOBJECT{
         .Type = D3D12_STATE_SUBOBJECT_TYPE_GLOBAL_ROOT_SIGNATURE,
