@@ -64,6 +64,11 @@ void createBuffer(
         throw std::runtime_error("Failed to create buffer.");
     }
 }
+
+UINT align(UINT value, UINT alignment)
+{
+    return (value + alignment - 1) & ~(alignment - 1);
+}
 }
 
 D3DEngine::D3DEngine(HWND hwnd)
@@ -85,6 +90,7 @@ D3DEngine::D3DEngine(HWND hwnd)
     createAS();
     createRaytracingPipelineState();
     createRaytracingResources();
+    createShaderTable();
 }
 
 void D3DEngine::cleanup()
@@ -1081,4 +1087,52 @@ void D3DEngine::createRaytracingResources()
         }
     };
     m_device->CreateUnorderedAccessView(m_raytracingOutput.Get(), nullptr, &uavDesc, srvHandle);
+}
+
+void D3DEngine::createShaderTable()
+{
+    Microsoft::WRL::ComPtr<ID3D12StateObjectProperties> stateObjectProps;
+    HRESULT hr = m_raytracingPipelineState->QueryInterface(IID_PPV_ARGS(&stateObjectProps));
+    if (FAILED(hr))
+    {
+        throw std::runtime_error("Failed to get state object properties.");
+    }
+
+    m_shaderRecordSize = align(
+        D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES + sizeof(D3D12_GPU_DESCRIPTOR_HANDLE),
+        D3D12_RAYTRACING_SHADER_RECORD_BYTE_ALIGNMENT
+    );
+    UINT totalSize = m_shaderRecordSize * 3; // raygen, miss, hitgroup
+
+    createBuffer(
+        m_device.Get(),
+        &m_shaderTable,
+        totalSize,
+        D3D12_HEAP_TYPE_UPLOAD,
+        D3D12_RESOURCE_FLAG_NONE,
+        D3D12_RESOURCE_STATE_GENERIC_READ
+    );
+
+    uint8_t* mappedData = nullptr;
+    hr = m_shaderTable->Map(0, nullptr, reinterpret_cast<void**>(&mappedData));
+    if (FAILED(hr))
+    {
+        throw std::runtime_error("Failed to map shader table.");
+    }
+
+    // raygen
+    memcpy(mappedData, stateObjectProps->GetShaderIdentifier(RAYGEN_SHADER.c_str()), D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
+    D3D12_GPU_DESCRIPTOR_HANDLE descHandle = m_descHeap->GetGPUDescriptorHandleForHeapStart();
+    memcpy(mappedData + D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES, &descHandle, sizeof(D3D12_GPU_DESCRIPTOR_HANDLE));
+    mappedData += m_shaderRecordSize;
+
+    // miss
+    memcpy(mappedData, stateObjectProps->GetShaderIdentifier(MISS_SHADER.c_str()), D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
+    mappedData += m_shaderRecordSize;
+
+    // hitgroup
+    memcpy(mappedData, stateObjectProps->GetShaderIdentifier(HIT_GROUP.c_str()), D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
+    mappedData += m_shaderRecordSize;
+
+    m_shaderTable->Unmap(0, nullptr);
 }

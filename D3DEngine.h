@@ -46,6 +46,7 @@ private:
     void createAS();
     void createRaytracingPipelineState();
     void createRaytracingResources();
+    void createShaderTable();
 
     static constexpr UINT FRAME_COUNT = 2;
 
@@ -80,6 +81,8 @@ private:
     Microsoft::WRL::ComPtr<ID3D12RootSignature> m_globalRootSignature;
     Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> m_descHeap;
     Microsoft::WRL::ComPtr<ID3D12Resource> m_raytracingOutput;
+    Microsoft::WRL::ComPtr<ID3D12Resource> m_shaderTable;
+    UINT m_shaderRecordSize = 0;
 
     RECT m_windowRect = {};
 
