@@ -944,4 +944,58 @@ void D3DEngine::createRaytracingPipelineState()
     };
     subobjectIndex++;
 
+    // local root signature (for Miss and ClosestHit shaders)
+    D3D12_ROOT_SIGNATURE_DESC missHitRootSignatureDesc = {
+        .NumParameters = 0,
+        .pParameters = nullptr,
+        .NumStaticSamplers = 0,
+        .pStaticSamplers = nullptr,
+        .Flags = D3D12_ROOT_SIGNATURE_FLAG_LOCAL_ROOT_SIGNATURE
+    };
+    hr = D3D12SerializeRootSignature(
+        &missHitRootSignatureDesc,
+        D3D_ROOT_SIGNATURE_VERSION_1,
+        &signatureBlob,
+        &errorBlob
+    );
+    if (FAILED(hr))
+    {
+        std::cerr << "Failed to serialize Miss/ClosestHit root signature: " << (errorBlob ? static_cast<const char*>(errorBlob->GetBufferPointer()) : "Unknown error") << std::endl;
+        return;
+    }
+
+    Microsoft::WRL::ComPtr<ID3D12RootSignature> missHitRootSignature;
+    hr = m_device->CreateRootSignature(
+        0,
+        signatureBlob->GetBufferPointer(),
+        signatureBlob->GetBufferSize(),
+        IID_PPV_ARGS(&missHitRootSignature)
+    );
+    if (FAILED(hr))
+    {
+        std::cerr << "Failed to create Miss/ClosestHit root signature." << std::endl;
+        return;
+    }
+
+    D3D12_LOCAL_ROOT_SIGNATURE missHitLocalRootSignature = {
+        .pLocalRootSignature = missHitRootSignature.Get()
+    };
+    subobjects[subobjectIndex] = D3D12_STATE_SUBOBJECT{
+        .Type = D3D12_STATE_SUBOBJECT_TYPE_LOCAL_ROOT_SIGNATURE,
+        .pDesc = &missHitLocalRootSignature
+    };
+    subobjectIndex++;
+
+    std::array missHitExportNames = { MISS_SHADER.c_str(), CLOSEST_HIT_SHADER.c_str() };
+    D3D12_SUBOBJECT_TO_EXPORTS_ASSOCIATION missHitSubobjectToExportsAssociation = {
+        .pSubobjectToAssociate = &subobjects[subobjectIndex - 1],
+        .NumExports = static_cast<UINT>(missHitExportNames.size()),
+        .pExports = missHitExportNames.data()
+    };
+    subobjects[subobjectIndex] = D3D12_STATE_SUBOBJECT{
+        .Type = D3D12_STATE_SUBOBJECT_TYPE_SUBOBJECT_TO_EXPORTS_ASSOCIATION,
+        .pDesc = &missHitSubobjectToExportsAssociation
+    };
+    subobjectIndex++;
+
 }
